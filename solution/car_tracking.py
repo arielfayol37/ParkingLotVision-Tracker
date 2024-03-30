@@ -7,6 +7,7 @@ import time
 
 from my_tracker import Tracker
 
+# print("HELOOOOOO")
 
 """
 Algorithm to track cars using a RNN and a CNN by @ Fayol Ateufack Zeudom
@@ -63,19 +64,23 @@ def label_car_on_frame(frame, track_id, x1, y1, x2, y2):
 
 def run_tracking(filepaths):
     models = {'0':'center_of_intersection/5', '1':'outside_the_intersection/3', '2':'vaid-jy5xo/1'}
-    model = get_roboflow_model(model_id=models['2'], api_key="UWNPpMrGPun13aPF9MLJ")
-    
+    model = get_roboflow_model(model_id=models['0'], api_key="UWNPpMrGPun13aPF9MLJ")
+    print(filepaths)
     for filepath in filepaths:
+        print(filepath)
         st = time.perf_counter()
         extension = 'mp4'
         base_path = os.path.join('.', 'data', filepath) 
         path_counter = 1
         # specific_filepath = os.path.join(base_path, f'{filepath}_{path_counter}')
         video_path = os.path.join(base_path, f'{filepath}_{path_counter}.{extension}')
+        print(video_path)
 
         while os.path.exists(video_path): 
-            video_out_path = os.path.join(base_path, f'{filepath}_{path_counter}_out.{extension}')
+            video_out_path = os.path.join(base_path, f'{filepath}_{path_counter}_outr.{extension}')
             cap = cv2.VideoCapture(video_path)
+            ret, frame = cap.read()
+
             nframes = cap.get(cv2.CAP_PROP_FRAME_COUNT)
             cap_out = cv2.VideoWriter(video_out_path, cv2.VideoWriter_fourcc(*'MP4V'), cap.get(cv2.CAP_PROP_FPS),
                                     (frame.shape[1], frame.shape[0]))
@@ -85,11 +90,14 @@ def run_tracking(filepaths):
 
             
             
-            ret, frame = cap.read()
+            
             height, width = frame.shape[:2]
             tracker = Tracker(width, height)
             detection_threshold = 0.3
+            counter = 0
             while ret:
+                print("frame #", counter)
+                counter += 1 
                 result = model.infer(frame)
                 detections = []
                 for r in result[0].predictions:
@@ -124,5 +132,5 @@ def run_tracking(filepaths):
 
 
 if __name__ == '__main__':
-    filepaths = ["data/video_3"]
+    filepaths = ["valpo_test_roundabout"]
     run_tracking(filepaths)

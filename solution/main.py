@@ -1,7 +1,6 @@
 import os
 import random
 import numpy as np
-import cv2
 from tracker import Tracker
 import cv2
 from inference import get_roboflow_model
