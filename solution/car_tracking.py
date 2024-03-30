@@ -6,6 +6,7 @@ from inference import get_roboflow_model
 import time
 
 from my_tracker import Tracker
+import copy
 
 # print("HELOOOOOO")
 
@@ -80,6 +81,7 @@ def run_tracking(filepaths):
             video_out_path = os.path.join(base_path, f'{filepath}_{path_counter}_outr.{extension}')
             cap = cv2.VideoCapture(video_path)
             ret, frame = cap.read()
+            frame_out = copy.deepcopy(frame)
 
             nframes = cap.get(cv2.CAP_PROP_FRAME_COUNT)
             cap_out = cv2.VideoWriter(video_out_path, cv2.VideoWriter_fourcc(*'MP4V'), cap.get(cv2.CAP_PROP_FPS),
@@ -96,7 +98,7 @@ def run_tracking(filepaths):
             detection_threshold = 0.3
             counter = 0
             while ret:
-                print("frame #", counter)
+                # print("frame #", counter)
                 counter += 1 
                 result = model.infer(frame)
                 detections = []
@@ -118,9 +120,17 @@ def run_tracking(filepaths):
                         x1, y1, a, h1 = car_dict["coords"][-1]
                         x2 = int(x1 + (a * h1))
                         y2 = y1 + h1
-                        frame = label_car_on_frame(frame, track_id, x1, y1, x2, y2)
-                cap_out.write(frame)
+                        frame_out = label_car_on_frame(frame_out, track_id, x1, y1, x2, y2)                
+                
+                """
+                for det in detections:
+                    frame_out = label_car_on_frame(frame_out, 0, det[0], det[1], det[0] + det[2], det[1] + det[3])
+                """
+
+
+                cap_out.write(frame_out)
                 ret, frame = cap.read()
+                frame_out = copy.deepcopy(frame)
             cap.release()
             cap_out.release()
             et = time.perf_counter()
@@ -132,5 +142,5 @@ def run_tracking(filepaths):
 
 
 if __name__ == '__main__':
-    filepaths = ["valpo_test_roundabout"]
+    filepaths = ["video_3"]
     run_tracking(filepaths)
