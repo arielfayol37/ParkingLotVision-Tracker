@@ -82,10 +82,21 @@ class Tracker:
             else:
                 self.cars_info[car_id]["coords"].append(coord_pts)
                 # TODO: this can be optimized by not having to predict at every timestep
+                # the brief idea is in the commented code below. Check before running
+                """
                 if self.cars_info[car_id]["time_update_pred"] >= predict_size:
                     self.cars_info[car_id]["time_update_pred"] = 0
-                    self.predict_car_position(car_id) # let us make sure that this is taking the right input before predicting by visualizing
-                # self.cars_info[car_id]["predicted"] = [coord_pts for i in range(predict_size)]
+                    self.predict_car_position(car_id)
+
+            pred_current = self.cars_info[car_id]["predicted"][self.cars_info[car_id]["time_update_pred"]]
+            self.update_region_map(self.get_bounding_box(pred_current), car_id)                    
+                """
+
+            
+            self.predict_car_position(car_id) # let us make sure that this is taking the right input before predicting by visualizing
+            # self.cars_info[car_id]["predicted"] = [coord_pts for i in range(predict_size)]
+
+
             pred_0 = self.cars_info[car_id]["predicted"][0]
             self.update_region_map(self.get_bounding_box(pred_0), car_id)
             
@@ -118,7 +129,7 @@ class Tracker:
         # draw_on_frame(frame_copy, coords=self.cars_info[car_id]["coords"], color=prev_path_color)
         # draw_on_frame(frame_copy, coords=preds, color=predict_path_color)
 
-    def get_car_id_with_highest_matching_score(self, car_ids, car_image, x_y_coord):
+    def get_car_id_with_highest_matching_score(self, car_ids, car_image, x_y_coord = None):
         """
         Given a list of car_ids and an image, return the id with the closest match
         or None if zero match for each.
@@ -153,28 +164,71 @@ class Tracker:
         # Get the value of the highest matching score
         val = cnn_matching_scores[max_arg]
 
-        if val == 0:
-            """
-            print(matching_scores)
+        if x_y_coord is None: # This should be none unless unidentified cars are tried to be matched to
+                              # to unmatched cars
             
-            for i in range(len(car_ids)):
-                        # Plot the images side by side
-                fig, axs = plt.subplots(1, 2, figsize=(10, 5))
-                axs[0].imshow(cars_images_a[i])
-                axs[0].set_title('Image A')
-                axs[0].axis('off')
+            if val == 0:
+                """
+                print(matching_scores)
                 
-                axs[1].imshow(cars_images_b[i])
-                axs[1].set_title('Image B')
-                axs[1].axis('off')
-                
-                # Show prediction
-                # plt.suptitle(f'PS, RS: {prediction[0][0]:.2f}, {data_Y[index]}')
-                plt.show()            
-            """
-            return None, cnn_matching_scores
+                for i in range(len(car_ids)):
+                            # Plot the images side by side
+                    fig, axs = plt.subplots(1, 2, figsize=(10, 5))
+                    axs[0].imshow(cars_images_a[i])
+                    axs[0].set_title('Image A')
+                    axs[0].axis('off')
+                    
+                    axs[1].imshow(cars_images_b[i])
+                    axs[1].set_title('Image B')
+                    axs[1].axis('off')
+                    
+                    # Show prediction
+                    # plt.suptitle(f'PS, RS: {prediction[0][0]:.2f}, {data_Y[index]}')
+                    plt.show()            
+                """
+                return None, cnn_matching_scores
+            else:
+                return car_ids[max_arg], cnn_matching_scores
         else:
-            return car_ids[max_arg], cnn_matching_scores 
+            if val == 0:
+                # doesn't look like any of the cars
+                return None, cnn_matching_scores
+            else:
+                # looks like one of the cars but is it the same car
+                # how far are these cars though
+                indices = cnn_matching_scores > 0
+                non_zero_look_alike_car_ids = list(np.array(car_ids)[indices])
+
+                within_range_ids = []
+
+                for idx, id in enumerate(non_zero_look_alike_car_ids):
+                    coords = self.cars_info[id]["coords"]
+                    time_elapsed = self.cars_info[id]["time_elapsed"]
+                    x, y, a, h = coords[0], coords[1], coords[2], coords[3]
+                    w = a * h
+                    dist_squared = (x - x_y_coord[0]) ** 2 + (y - x_y_coord[1]) ** 2
+                    allowed_dist = 0.3 * w * time_elapsed # the 0.3 is arbirtarily chosen by intuition
+                                                          # for each frame, car should not move more than
+                                                          # 0.3 of its width I think
+                    if dist_squared < allowed_dist ** 2:
+                        # within acceptable range
+                        within_range_ids.append([idx, id])
+                
+                # now return the acceptable id with the highest cnn match
+                return_id = None
+                max_match_score = 0
+
+                for idx, id in within_range_ids:
+                    if cnn_matching_scores[idx] > max_match_score:
+                        return_id = id
+                        max_match_score = cnn_matching_scores[idx]
+                
+                return return_id, cnn_matching_scores # careful not to use this cnn_matching_scores further
+                                                      # because the id here was returned based off distances too
+
+
+                
+
     
     def update(self, detections, current_frame):
         """
@@ -190,19 +244,20 @@ class Tracker:
 
             max_car_id, max_car_coverage, car_ids_covered = self.process_coverages(bounding_box)
             # print("car ids covered", car_ids_covered)
+      
+            if max_car_coverage >= 0.75: # count this as a match
+                # print(max_car_id, "a")
+                self.update_car(max_car_id, bounding_box)
+            
+            elif max_car_coverage >= 0.3: # use CNN to identify which car is it
 
-            if len(car_ids_covered) == 1:
-                car_id = car_ids_covered[0]
-                self.update_car(car_id, bounding_box)
-            else:
-                if max_car_coverage >= 0.75: # count this as a match
-                    # print(max_car_id, "a")
-                    self.update_car(max_car_id, bounding_box)
-                
-                elif max_car_coverage >= 0.3: # use CNN to identify which car is it
+                if len(car_ids_covered) == 1:
+                    car_id = car_ids_covered[0]
+                    self.update_car(car_id, bounding_box)
+                else:
                     car_image = self.get_image(bounding_box)
-                    x_y_coord = bounding_box[0], bounding_box[1]
-                    car_id, matching_scores = self.get_car_id_with_highest_matching_score(car_ids_covered, car_image, x_y_coord)
+                    # x_y_coord = bounding_box[0], bounding_box[1]
+                    car_id, matching_scores = self.get_car_id_with_highest_matching_score(car_ids_covered, car_image)
                     # if car_id here is None, then the the matching_score was zero (which is not supposed to be the case)
                     # because the car must be visible, hence the CNN shouldn't give 0.0 in principle(unless it is not
                     # well trained)
@@ -213,8 +268,8 @@ class Tracker:
                         self.unidentified_cars.append(bounding_box)
                     else:
                         self.update_car(car_id, bounding_box)    
-                else: # car unidentifiable based on position only
-                    self.unidentified_cars.append(bounding_box)
+            else: # car unidentifiable based on position only
+                self.unidentified_cars.append(bounding_box)
 
         temp_unidentified_cars = []    
         for bounding_box in self.unidentified_cars:
@@ -226,6 +281,9 @@ class Tracker:
 
             -Make use of the distance from last seen and the time elapsed too. How far a car should be from the 
              last time should also depend on how much time has passed.
+
+            - Also, remember that new cars should usually(besides the first z << n[n=number of frames]) 
+              appear at the borders of the screen
             """
             car_image = self.get_image(bounding_box)
             x_y_coord = bounding_box[0], bounding_box[1]
@@ -242,6 +300,7 @@ class Tracker:
         self.unidentified_cars = temp_unidentified_cars
 
         for car_id in self.unmatched_cars:
+            # TODO: rethink the exit logic
             # check if the RNN is predicting the car to go out of bounds
             last_pred = self.cars_info[car_id]["predicted"][-1]
             x, y, a, h = last_pred[0], last_pred[1], last_pred[2], last_pred[3]
@@ -262,7 +321,7 @@ class Tracker:
         x, y, width, height = bounding_box[0], bounding_box[1], bounding_box[2], bounding_box[3]
         x_c, y_c, width_c, height_c = self.clip_coords(x, y, width, height)
         ids = set(self.region_map[x_c: x_c + width_c, y_c: y_c + height_c].reshape(-1).tolist())
-        ids.discard(0)
+        ids.discard(0) # because the region map is initialized with zeroes and ids start with 1
         if len(ids) != 0:
             car_ids_covered = list(ids)
         else:
@@ -270,7 +329,7 @@ class Tracker:
 
         coverages =[]
 
-        if len(car_ids_covered) == 0: # because the region map is initialized with zeroes and ids start with 1
+        if len(car_ids_covered) == 0: 
             return -1, 0, []
 
         for car_id in car_ids_covered:
