@@ -7,6 +7,7 @@ import time
 
 from my_tracker import Tracker
 import copy
+import sys
 
 # print("HELOOOOOO")
 
@@ -78,7 +79,7 @@ def run_tracking(filepaths):
         print(video_path)
 
         while os.path.exists(video_path): 
-            video_out_path = os.path.join(base_path, f'{filepath}_{path_counter}_outr.{extension}')
+            video_out_path = os.path.join(base_path, f'{filepath}_{path_counter}_with_rnn_v1.{extension}')
             cap = cv2.VideoCapture(video_path)
             ret, frame = cap.read()
             frame_out = copy.deepcopy(frame)
@@ -95,37 +96,42 @@ def run_tracking(filepaths):
             
             height, width = frame.shape[:2]
             tracker = Tracker(width, height)
-            detection_threshold = 0.3
+            detection_threshold = 0.3 
             counter = 0
             while ret:
                 # print("frame #", counter)
+                percent = int((counter / nframes) * 100)
+                if percent % 10 == 0:
+                    print(f"{percent:.2g}% progress for {video_out_path}")
                 counter += 1 
-                result = model.infer(frame)
+                result = model.infer(frame, confidence=detection_threshold, overlap=0)
                 detections = []
                 for r in result[0].predictions:
-                    score, class_id =  r.confidence, r.class_id
                     x = int(r.x -r.width / 2)
-                    x2 = int(r.x +r.width / 2)
                     y = int(r.y -r.height / 2)
-                    y2 = int(r.y +r.height / 2)
-                    h = y2 - y
-                    w = x2 - x
-                    if score > detection_threshold:
-                        detections.append([x, y, w, h])
+                    h = int(r.height)
+                    w = int(r.width)
+                    
+                    detections.append([x, y, w, h])
+                
+                
                 
                 tracker.update(detections, frame)
-                
                 for track_id, car_dict in tracker.cars_info.items():
                     if car_dict["time_elapsed"] == 0:
                         x1, y1, a, h1 = car_dict["coords"][-1]
                         x2 = int(x1 + (a * h1))
                         y2 = y1 + h1
-                        frame_out = label_car_on_frame(frame_out, track_id, x1, y1, x2, y2)                
+                        frame_out = label_car_on_frame(frame_out, track_id, x1, y1, x2, y2)                  
+               
+              
                 
                 """
                 for det in detections:
-                    frame_out = label_car_on_frame(frame_out, 0, det[0], det[1], det[0] + det[2], det[1] + det[3])
+                    frame_out = label_car_on_frame(frame_out, 0, det[0], det[1], det[0] + det[2], det[1] + det[3])                
                 """
+
+                
 
 
                 cap_out.write(frame_out)
@@ -142,5 +148,6 @@ def run_tracking(filepaths):
 
 
 if __name__ == '__main__':
-    filepaths = ["video_3"]
+    filepaths = ["valpo", "video_3", "Long_video_4", "Long_video_3", "Long_video_2", "Long_video_1"]
+    # filepaths = ["valpo"]
     run_tracking(filepaths)
